@@ -865,6 +865,27 @@ public class Unobfuscator {
         return UnobfuscatorCache.getInstance().getMethod(loader, () -> {
             Method method = findFirstMethodUsingStrings(loader, StringMatchType.Contains, "ConversationViewFiller/setParentGroupProfilePhoto");
             if (method == null) throw new Exception("OnChangeStatus method not found");
+
+            // for 19.xx, the current implementation returns wrong method
+            if (method.getParameterCount() < 6) {
+                ClassData declaringClassData = dexkit.getClassData(method.getDeclaringClass());
+                if (declaringClassData == null) throw new Exception("OnChangeStatus method not found");
+
+                Class<?> arg1Class = findFirstClassUsingStrings(loader, StringMatchType.Contains, "problematic contact:");
+                MethodDataList methodData = declaringClassData.findMethod(
+                        FindMethod.create().matcher(MethodMatcher.create().paramCount(6, 8)));
+
+                for (var methodItem : methodData) {
+                    var paramTypes = methodItem.getParamTypes();
+
+                    if (paramTypes.get(0).getInstance(loader) == arg1Class &&
+                            paramTypes.get(1).getInstance(loader) == arg1Class) {
+                        method = methodItem.getMethodInstance(loader);
+                        break;
+                    }
+                }
+            }
+
             return method;
         });
     }
@@ -1002,6 +1023,15 @@ public class Unobfuscator {
             return methodData.get(0).getMethodInstance(loader);
         });
     }
+
+    public synchronized static Method loadOriginalMessageKey(ClassLoader loader) throws Exception {
+        return UnobfuscatorCache.getInstance().getMethod(loader, () -> {
+            var method = findFirstMethodUsingStrings(loader, StringMatchType.Contains, "FMessageUtil/getOriginalMessageKeyIfEdited");
+            if (method == null) throw new RuntimeException("MessageEdit method not found");
+            return method;
+        });
+    }
+
 
     public synchronized static Method loadNewMessageWithMediaMethod(ClassLoader loader) throws Exception {
         var clazzMessage = Objects.requireNonNull(dexkit.getClassData(loadFMessageClass(loader)));
@@ -1397,7 +1427,7 @@ public class Unobfuscator {
 
     public synchronized static Method loadNextStatusRunMethod(ClassLoader classLoader) throws Exception {
         return UnobfuscatorCache.getInstance().getMethod(classLoader, () -> {
-            var methodList = dexkit.findMethod(new FindMethod().matcher(new MethodMatcher().addUsingString("SequentialVoiceMemoPlayer/playMiddleTone").name("run")));
+            var methodList = dexkit.findMethod(new FindMethod().matcher(new MethodMatcher().addUsingString("playMiddleTone").name("run")));
             if (methodList.isEmpty()) throw new RuntimeException("RunNextStatus method not found");
             return methodList.get(0).getMethodInstance(classLoader);
         });
