@@ -1,8 +1,9 @@
 package com.wmods.wppenhacer.xposed.features.privacy;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.os.Bundle;
+import android.content.Context;
+import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
@@ -11,92 +12,112 @@ import androidx.annotation.NonNull;
 
 import com.wmods.wppenhacer.xposed.core.Feature;
 import com.wmods.wppenhacer.xposed.core.WppCore;
-import com.wmods.wppenhacer.xposed.utils.DebugUtils;
+import com.wmods.wppenhacer.xposed.core.components.AlertDialogWpp;
 import com.wmods.wppenhacer.xposed.utils.ReflectionUtils;
 import com.wmods.wppenhacer.xposed.utils.ResId;
 import com.wmods.wppenhacer.xposed.utils.Utils;
 
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.lang.reflect.Method;
 
-import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XSharedPreferences;
 import de.robv.android.xposed.XposedHelpers;
 
 public class CustomPrivacy extends Feature {
-    private Method userJidMethod;
+    private Method chatUserJidMethod;
+    private Method groupUserJidMethod;
 
     public CustomPrivacy(@NonNull ClassLoader classLoader, @NonNull XSharedPreferences preferences) {
         super(classLoader, preferences);
     }
 
-    @Override
-    public void doHook() throws Throwable {
-        Class<?> ContactInfoActivityClass = classLoader.loadClass("com.whatsapp.chatinfo.ContactInfoActivity");
-        var userJidClass = classLoader.loadClass("com.whatsapp.jid.UserJid");
-        userJidMethod = ReflectionUtils.findMethodUsingFilter(ContactInfoActivityClass, method -> method.getParameterCount() == 0 && method.getReturnType() == userJidClass);
-
-        XposedHelpers.findAndHookMethod(ContactInfoActivityClass, "onCreate", Bundle.class, new XC_MethodHook() {
-            @Override
-            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                Activity activity = (Activity) param.thisObject;
-                ViewGroup infoLayout = activity.findViewById(Utils.getID("contact_info_security_card_layout", "id"));
-                Class listItemWithLeftIconClass = classLoader.loadClass("com.whatsapp.ListItemWithLeftIcon");
-                Object itemView = XposedHelpers.newInstance(listItemWithLeftIconClass, activity);
-                XposedHelpers.callMethod(itemView, "setTitle", activity.getString(ResId.string.custom_privacy));
-                XposedHelpers.callMethod(itemView, "setDescription", activity.getString(ResId.string.custom_privacy_sum));
-                XposedHelpers.callMethod(itemView, "setIcon", ResId.drawable.ic_privacy);
-                View layoutItem = (View) itemView;
-                layoutItem.setOnClickListener((v) -> {
-                    showPrivacyDialog(activity);
-                });
-                infoLayout.addView(layoutItem);
-            }
-        });
+    public static JSONObject getJSON(String number) {
+        if (!Utils.xprefs.getBoolean("custom_privacy", true) || TextUtils.isEmpty(number))
+            return new JSONObject();
+        return WppCore.getPrivJSON(number + "_privacy", new JSONObject());
     }
 
-    private void showPrivacyDialog(Activity activity) {
-        var userJid = ReflectionUtils.callMethod(userJidMethod, activity);
+    @Override
+    public void doHook() throws Throwable {
+        if (!prefs.getBoolean("custom_privacy", true)) return;
+
+        Class<?> ContactInfoActivityClass = XposedHelpers.findClass("com.whatsapp.chatinfo.ContactInfoActivity", classLoader);
+        Class<?> GroupInfoActivityClass = XposedHelpers.findClass("com.whatsapp.group.GroupChatInfoActivity", classLoader);
+        Class<?> listItemWithLeftIconClass = XposedHelpers.findClass("com.whatsapp.ListItemWithLeftIcon", classLoader);
+        Class<?> userJidClass = XposedHelpers.findClass("com.whatsapp.jid.UserJid", classLoader);
+        Class<?> groupJidClass = XposedHelpers.findClass("com.whatsapp.jid.GroupJid", classLoader);
+
+        chatUserJidMethod = ReflectionUtils.findMethodUsingFilter(ContactInfoActivityClass, method -> method.getParameterCount() == 0 && userJidClass.isAssignableFrom(method.getReturnType()));
+        groupUserJidMethod = ReflectionUtils.findMethodUsingFilter(GroupInfoActivityClass, method -> method.getParameterCount() == 0 && groupJidClass.isAssignableFrom(method.getReturnType()));
+
+        var hooker = new WppCore.ActivityChangeState() {
+            @SuppressLint("ResourceType")
+            @Override
+            public void onChange(Object objActivity, ChangeType type) {
+                try {
+                    if (type != ChangeType.START) return;
+                    if (!ContactInfoActivityClass.isInstance(objActivity) && !GroupInfoActivityClass.isInstance(objActivity))
+                        return;
+                    Activity activity = (Activity) objActivity;
+                    if (activity.findViewById(0x7f0a9999) != null) return;
+                    int id = Utils.getID("contact_info_security_card_layout", "id");
+                    ViewGroup infoLayout = activity.getWindow().findViewById(id);
+                    View itemView = (View) listItemWithLeftIconClass.getConstructor(Context.class).newInstance(activity);
+                    itemView.setId(0x7f0a9999);
+                    listItemWithLeftIconClass.getMethod("setTitle", CharSequence.class).invoke(itemView, activity.getString(ResId.string.custom_privacy));
+                    listItemWithLeftIconClass.getMethod("setDescription", CharSequence.class).invoke(itemView, activity.getString(ResId.string.custom_privacy_sum));
+                    listItemWithLeftIconClass.getMethod("setIcon", int.class).invoke(itemView, ResId.drawable.ic_privacy);
+                    itemView.setOnClickListener((v) -> showPrivacyDialog(activity, ContactInfoActivityClass.isInstance(activity)));
+                    infoLayout.addView(itemView);
+                } catch (Throwable e) {
+                    logDebug(e);
+                    Utils.showToast(e.getMessage(), Toast.LENGTH_SHORT);
+                }
+            }
+        };
+        WppCore.addListenerActivity(hooker);
+    }
+
+    private void showPrivacyDialog(Activity activity, boolean isChat) {
+        Object userJid;
+        if (isChat) {
+            userJid = ReflectionUtils.callMethod(chatUserJidMethod, activity);
+        } else {
+            userJid = ReflectionUtils.callMethod(groupUserJidMethod, activity);
+        }
         if (userJid == null) return;
         var rawJid = WppCore.getRawString(userJid);
         var number = WppCore.stripJID(rawJid);
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+        var builder = new AlertDialogWpp(activity);
         builder.setTitle(ResId.string.custom_privacy);
         String[] items = {activity.getString(ResId.string.hideread), activity.getString(ResId.string.hidestatusview), activity.getString(ResId.string.hidereceipt), activity.getString(ResId.string.ghostmode), activity.getString(ResId.string.ghostmode_r)};
         String[] itemsKeys = {"HideSeen", "HideViewStatus", "HideReceipt", "HideTyping", "HideRecording"};
+        String[] globalKeys = {"hideread", "hidestatusview", "hidereceipt", "ghostmode_t", "ghostmode_r"};
+
+        // load prefs
         boolean[] checkedItems = new boolean[items.length];
-        var jsonStr = WppCore.getPrivString(number + "_privacy", null);
-        if (jsonStr != null) {
-            try {
-                var json = new JSONObject(jsonStr);
-                for (int i = 0; i < itemsKeys.length; i++) {
-                    if (json.optBoolean(itemsKeys[i], false)) {
-                        checkedItems[i] = true;
-                    }
-                }
-            } catch (JSONException e) {
-                Utils.showToast(e.getMessage(), Toast.LENGTH_SHORT);
-            }
+        var json = CustomPrivacy.getJSON(number);
+        for (int i = 0; i < itemsKeys.length; i++) {
+            checkedItems[i] = json.optBoolean(itemsKeys[i], prefs.getBoolean(globalKeys[i], false));
         }
+
         builder.setMultiChoiceItems(items, checkedItems, (dialog, which, isChecked) -> checkedItems[which] = isChecked);
         builder.setPositiveButton("OK", (dialog, which) -> {
             try {
                 JSONObject jsonObject = new JSONObject();
                 for (int i = 0; i < itemsKeys.length; i++) {
-                    jsonObject.put(itemsKeys[i], checkedItems[i]);
+                    if (prefs.getBoolean(globalKeys[i], false) != checkedItems[i])
+                        jsonObject.put(itemsKeys[i], checkedItems[i]);
                 }
-                WppCore.setPrivString(number + "_privacy", jsonObject.toString());
+                WppCore.setPrivJSON(number + "_privacy", jsonObject);
             } catch (Exception e) {
                 Utils.showToast(e.getMessage(), Toast.LENGTH_SHORT);
             }
         });
-        builder.setNegativeButton(ResId.string.cancel, null);
-        AlertDialog dialog = builder.create();
-        dialog.show();
+        builder.setNegativeButton(activity.getString(ResId.string.cancel), null);
+        builder.show();
     }
-
 
     @NonNull
     @Override

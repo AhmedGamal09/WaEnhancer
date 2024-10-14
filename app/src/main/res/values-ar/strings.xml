@@ -374,8 +374,16 @@
     <string name="select_all">تحديد الكل</string>
     <string name="custom_colors_for_text_status">ألوان مخصصة لحالة النص</string>
     <string name="custom_colors_for_text_status_sum">اضغط باستمرار على منتقي الألوان في الحالة لتخصيصه</string>
-    <string name="enable_wa_enhancer_button">Enable Wa Enhancer Button</string>
-    <string name="enable_wa_enhancer_button_sum">Add button in Home Screen to open Wa Enhancer</string>
-    <string name="custom_privacy">Custom Privacy</string>
-    <string name="custom_privacy_sum">Enable/Disable Custom Privacy</string>
+    <string name="enable_wa_enhancer_button">تمكين أيقونة لفتح إعدادات الوحدة</string>
+    <string name="enable_wa_enhancer_button_sum">إظهار الأيقونة في الشاشة الرئيسية</string>
+    <string name="custom_privacy">الخصوصية(المخصصة)</string>
+    <string name="custom_privacy_sum">تمكين/تعطيل الخصوصية المخصصة</string>
+    <string name="custom_privacy_per_contact">خصوصية مخصصة لكل جهة اتصال</string>
+    <string name="custom_privacy_per_contact_sum">قم بتنشيط الخصوصية المخصص على شاشة معلومات الاتصال</string>
+    <string name="assemblyai">Enable AssemblyAI</string>
+    <string name="assemblyai_sum">Replaces the default Whatsapp transcription with AssemblyAI</string>
+    <string name="assemblyai_key">AssemblyAI key</string>
+    <string name="assemblyai_key_sum">AssemblyAI API access key (Login to the website and create an account to get your key)</string>
+    <string name="google_translate">Enable Google Translate</string>
+    <string name="google_translate_sum">Replaces Whatsapp\'s native translator with Google Translate</string>
 </resources>

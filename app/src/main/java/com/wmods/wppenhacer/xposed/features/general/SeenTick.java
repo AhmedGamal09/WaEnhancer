@@ -101,7 +101,7 @@ public class SeenTick extends Feature {
 
         // hook conversation screen
 
-        WppCore.addListenerChat((activity, type) -> {
+        WppCore.addListenerActivity((activity, type) -> {
             if (activity.getClass().getSimpleName().equals("Conversation") && (type == WppCore.ActivityChangeState.ChangeType.START || type == WppCore.ActivityChangeState.ChangeType.RESUME)) {
                 var jid = WppCore.getCurrentRawJID();
                 if (!Objects.equals(jid, currentJid)) {
@@ -230,8 +230,6 @@ public class SeenTick extends Feature {
         XposedBridge.hookMethod(onCreateMenuConversationMethod, new XC_MethodHook() {
             @Override
             protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                if (!prefs.getBoolean("hideread", false))
-                    return;
                 var menu = (Menu) param.args[0];
                 var menuItem = menu.add(0, 0, 0, ResId.string.send_blue_tick);
                 if (ticktype == 1) menuItem.setShowAsAction(2);
@@ -320,8 +318,7 @@ public class SeenTick extends Feature {
                 var rawJid = (String) XposedHelpers.getObjectField(obj, "jid");
 
                 var handler = new Handler(Looper.getMainLooper());
-                Class<?> clazz = XposedHelpers.findClass("com.whatsapp.status.playback.StatusPlaybackActivity", classLoader);
-                if (Objects.equals(currentScreen, "status") && WppCore.getCurrentActivity().getClass() == clazz) {
+                if (Objects.equals(currentScreen, "status") && !rawJid.contains("status")) {
                     if (messages.isEmpty()) return;
                     MessageStore.getInstance().storeMessageRead(messages.valueAt(0).messageId);
                     var view = messageMap.get(messages.valueAt(0).messageId);

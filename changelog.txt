@@ -1,8 +1,11 @@
-[Custom Privacy]
-* Added option to customize privacy per contact (On WhatsApp, select a contact and go to information -> Custom privacy). It is worth remembering that global privacy has a general effect on custom privacy, so you must deactivate it first in WAE to use custom privacy in WhatsApp.
+[AUDIO TRANSCRIPTION]
+* Added the option to use the AssemblyAI API to convert audio to text (This function replaces the native one from WhatsApp, but you need to generate a free key on the AssemblyAI website to use it).
 
-[MENU BUTTON]
-* Added a menu on the home screen to open WAE directly from WhatsApp.
+[MESSAGE TRANSLATION]
+* Added the option to use Google Translation (This replaces the native translation of WhatsApp, which limits the number of languages. With Google Translation, the identification of the translation is automatic and translates to WhatsApp's default language. You can select any language when translating, regardless of which one it is).
+
+[CUSTOM PRIVACY]
+* Improve code
 
 [WAE]
-* Update translations
+* Update translation
