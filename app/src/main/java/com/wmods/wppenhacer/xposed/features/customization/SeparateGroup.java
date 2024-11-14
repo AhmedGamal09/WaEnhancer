@@ -4,6 +4,7 @@ import static de.robv.android.xposed.XposedHelpers.callMethod;
 import static de.robv.android.xposed.XposedHelpers.getObjectField;
 
 import android.annotation.SuppressLint;
+import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.BaseAdapter;
@@ -23,6 +24,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XSharedPreferences;
@@ -143,18 +145,26 @@ public class SeparateGroup extends Feature {
             @SuppressLint("ResourceType")
             @Override
             protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                var superClass = param.thisObject.getClass().getSuperclass();
-                if (superClass != null && superClass == iconTabMethod.getDeclaringClass()) {
-                    var field1 = superClass.getDeclaredField(iconField.getName()).get(param.thisObject);
-                    var field2 = getObjectField(field1, iconFrameField.getName());
-                    if (field2 == null) return;
-                    var menu = (Menu) getObjectField(field2, iconMenuField.getName());
-                    if (menu == null) return;
-                    // add Icon to menu
-                    var menuItem = (MenuItem) menu.findItem(GROUPS);
-                    if (menuItem != null) {
-                        menuItem.setIcon(Utils.getID("home_tab_communities_selector", "drawable"));
-                    }
+                var obj = param.thisObject;
+                var superClass = obj.getClass().getSuperclass();
+
+                // for 23.xx, superClass != iconTabMethod.getDeclaringClass()
+                if (!(superClass != null && superClass == iconTabMethod.getDeclaringClass())) {
+                    var preIconTabField = Unobfuscator.loadPreIconTabField(classLoader);
+                    var field0 = getObjectField(obj, preIconTabField.getName());
+                    superClass = field0.getClass().getSuperclass();
+                    obj = field0;
+                }
+
+                var field1 = superClass.getDeclaredField(iconField.getName()).get(obj);
+                var field2 = getObjectField(field1, iconFrameField.getName());
+                if (field2 == null) return;
+                var menu = (Menu) getObjectField(field2, iconMenuField.getName());
+                if (menu == null) return;
+                // add Icon to menu
+                var menuItem = (MenuItem) menu.findItem(GROUPS);
+                if (menuItem != null) {
+                    menuItem.setIcon(Utils.getID("home_tab_communities_selector", "drawable"));
                 }
             }
         });
@@ -185,23 +195,25 @@ public class SeparateGroup extends Feature {
 
         var recreateFragmentMethod = Unobfuscator.loadRecreateFragmentConstructor(classLoader);
 
+        var pattern = Pattern.compile("android:switcher:\\d+:(\\d+)");
+
+        Class<?> FragmentClass = classLoader.loadClass("androidx.fragment.app.Fragment");
+
         XposedBridge.hookMethod(recreateFragmentMethod, new XC_MethodHook() {
             @Override
             protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                var object = param.args[2];
-                var desc = XposedHelpers.getObjectField(object, "A06");
-                if (desc == null) return;
-                var split = desc.toString().split(":");
-                var id = 0;
-                try {
-                    id = Integer.parseInt(split[split.length - 1]);
-                } catch (Exception ignored) {
-                    return;
-                }
-                if (id == GROUPS || id == CHATS) {
-                    var convFragment = XposedHelpers.getObjectField(param.thisObject, "A02");
-                    tabInstances.remove(id);
-                    tabInstances.put(id, convFragment);
+                var bundle = (Bundle) param.args[0];
+                var state = bundle.getParcelable("state");
+                var string = state.toString();
+                var matcher = pattern.matcher(string);
+                if (matcher.find()) {
+                    var tabId = Integer.parseInt(matcher.group(1));
+                    if (tabId == GROUPS || tabId == CHATS) {
+                        var fragmentField = ReflectionUtils.getFieldByType(param.thisObject.getClass(), FragmentClass);
+                        var convFragment = ReflectionUtils.getObjectField(fragmentField, param.thisObject);
+                        tabInstances.remove(tabId);
+                        tabInstances.put(tabId, convFragment);
+                    }
                 }
             }
         });
