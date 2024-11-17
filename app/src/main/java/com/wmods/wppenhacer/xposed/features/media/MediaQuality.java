@@ -1,6 +1,5 @@
 package com.wmods.wppenhacer.xposed.features.media;
 
-import android.annotation.SuppressLint;
 import android.graphics.Bitmap;
 import android.graphics.RecordingCanvas;
 import android.os.Build;
@@ -30,12 +29,14 @@ public class MediaQuality extends Feature {
     public void doHook() throws Exception {
         var videoQuality = prefs.getBoolean("videoquality", false);
         var imageQuality = prefs.getBoolean("imagequality", false);
+        var maxSize = (int) prefs.getFloat("video_limit_size", 60);
 
         Others.propsBoolean.put(7950, false); // Força o uso do MediaComposer para processar os videos
 
         if (videoQuality) {
 
             Others.propsBoolean.put(5549, true); // Remove o limite de qualidade do video
+
             var jsonProperty = Unobfuscator.loadPropsJsonMethod(classLoader);
             XposedBridge.hookMethod(jsonProperty, new XC_MethodHook() {
                 @Override
@@ -50,8 +51,8 @@ public class MediaQuality extends Feature {
                         for (int i = 0; i < json.length(); i++) {
                             var key = (String) json.names().opt(i);
                             var jSONObject = json.getJSONObject(key);
-                            jSONObject.put("max_bitrate", 16000);
-                            jSONObject.put("max_bandwidth", 90);
+                            jSONObject.put("max_bitrate", 96000);
+                            jSONObject.put("max_bandwidth", maxSize);
                         }
                     }
                 }
@@ -81,30 +82,31 @@ public class MediaQuality extends Feature {
             var videoMethod = Unobfuscator.loadMediaQualityVideoMethod2(classLoader);
             logDebug(Unobfuscator.getMethodDescriptor(videoMethod));
 
-            var fields = Unobfuscator.loadMediaQualityVideoFields(classLoader);
+//            var mediaFields = Unobfuscator.loadMediaQualityOriginalVideoFields(classLoader);
+            var mediaTranscodeParams = Unobfuscator.loadMediaQualityVideoFields(classLoader);
 
             XposedBridge.hookMethod(videoMethod, new XC_MethodHook() {
-                @SuppressLint("DefaultLocale")
+
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     if ((int) param.args[1] == 3) {
                         var resizeVideo = param.getResult();
-                        if (prefs.getBoolean("video_real_resolution", false)) {
+//                        var width = mediaFields.get("widthPx").getInt(param.args[0]);
+//                        var height = mediaFields.get("heightPx").getInt(param.args[0]);
+//
+//                        var targetWidthField = mediaTranscodeParams.get("targetWidth");
+//                        var targetHeightField = mediaTranscodeParams.get("targetHeight");
+//                        var targetWidth = targetWidthField.getInt(resizeVideo);
+//                        var targetHeight = targetHeightField.getInt(resizeVideo);
+//
+//                        var inverted = targetWidth > targetHeight != width > height;
+//
+//                        targetHeightField.setInt(resizeVideo, inverted ? width : height);
+//                        targetWidthField.setInt(resizeVideo, inverted ? height : width);
 
-                            var sourceWidthField = fields.get("sourceWidth");
-                            var sourceHeightField = fields.get("sourceHeight");
-
-                            var sourceWidth = sourceWidthField.getInt(resizeVideo);
-                            var sourceHeight = sourceHeightField.getInt(resizeVideo);
-
-                            var targetWidthField = fields.get("targetWidth");
-                            var targetHeightField = fields.get("targetHeight");
-
-                            targetHeightField.setInt(resizeVideo, sourceHeight);
-                            targetWidthField.setInt(resizeVideo, sourceWidth);
-                        }
                         if (prefs.getBoolean("video_maxfps", false)) {
-                            XposedHelpers.setIntField(resizeVideo, "A01", 60);
+                            var frameRateField = mediaTranscodeParams.get("frameRate");
+                            frameRateField.setInt(resizeVideo, 60);
                         }
                     }
                 }
@@ -117,13 +119,13 @@ public class MediaQuality extends Feature {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     super.beforeHookedMethod(param);
-                    if (prefs.getBoolean("video_size_limit", false)) {
-                        param.args[0] = 90;
-                    }
+                    param.args[0] = maxSize;
                     param.args[1] = 8000;  // 4K Resolution
                     param.args[2] = 96 * 1000 * 1000; // 96 Mbps
                 }
             });
+
+            Others.propsInteger.put(8606, maxSize);
 
         }
 
